@@ -3,25 +3,33 @@
 # Name:         sfp_new_module
 # Purpose:      SpiderFoot plug-in for creating new modules.
 #
-# Author:      Daniel García Baameiro <dagaba13@gmail.com>
+# Author:      Razvan Alexandru Copaceanu
+# Based on the template: Daniel García Baameiro <dagaba13@gmail.com>
 #
-# Created:     24/06/2021
-# Copyright:   (c) Daniel García Baameiro 2021
+# Created:     18/01/2023
+# Copyright:   (c) Razvan Alexandru Copaceanu 2023
 # Licence:     GPL
 # -------------------------------------------------------------------------------
 
 
 from spiderfoot import SpiderFootEvent, SpiderFootPlugin
+import json
 
-
-class sfp_new_module(SpiderFootPlugin):
+class sfp_tendersguru(SpiderFootPlugin):
 
     meta = {
-        'name': "New Module",
-        'summary': "Perform a <¿what this module do?>",
+        'name': "Tenders Guru",
+        'summary': "Allows to get data for procurements and tenders in Spain.",
         'flags': [""],
-        'useCases': [""],
-        'categories': ["Passive DNS"]
+        'useCases': ["Investigate", "Passive"],
+        'categories': ["Search Engines"],
+        'dataSource': {
+        	'website': "https://tenders.guru",
+        	'model': "FREE_AUTH",
+        	'references': [
+        		"https://tenders.guru/es/api"
+        	]
+        }
     }
 
     # Default options
@@ -33,6 +41,7 @@ class sfp_new_module(SpiderFootPlugin):
     }
 
     results = None
+    errorState = False
 
     def setup(self, sfc, userOpts=dict()):
         self.sf = sfc
@@ -41,18 +50,14 @@ class sfp_new_module(SpiderFootPlugin):
         for opt in list(userOpts.keys()):
             self.opts[opt] = userOpts[opt]
 
-    # What events is this module interested in for input
+
     def watchedEvents(self):
-        return ["DOMAIN_NAME", "DOMAIN_NAME_PARENT", "CO_HOSTED_SITE_DOMAIN", 
-                "AFFILIATE_DOMAIN_NAME", "SIMILARDOMAIN"]
-
-    # What events this module produces
-    # This is to support the end user in selecting modules based on events
-    # produced.
+        return ["TENDERS_LIST"]
+        
+   
     def producedEvents(self):
-        return ["DOMAIN_NAME"]
+        return ["COUNTRY_NAME"]
 
-    # Handle events sent to this module
     def handleEvent(self, event):
         eventName = event.eventType
         srcModuleName = event.module
@@ -74,6 +79,20 @@ class sfp_new_module(SpiderFootPlugin):
             ########################
             # Insert here the code #
             ########################
+            res = self.sf.fetchUrl('https://tenders.guru/es/api' + useragent=='SpiderFoot')
+            if res['total'] != 0:
+                data = res['total']
+                return data
+		
+            if res['code'] != '200':
+                self.error('Unexpected reply from tenders.guru: ' + res['code'])
+                self.errorState = True
+                return None
+	
+            try:
+                return json.loads(res['content'])
+            except Exception as e:
+                self.debug(f"Error processing JSON response: {e}")
 
             if not data:
                 self.sf.error("Unable to perform <ACTION MODULE> on " + eventData)
@@ -82,10 +101,10 @@ class sfp_new_module(SpiderFootPlugin):
             self.sf.error("Unable to perform the <ACTION MODULE> on " + eventData + ": " + str(e))
             return
 
-        typ = "DOMAIN_NAME"
-        data = "newdomaintest.com"
+        typ = "COUNTRY_NAME"
+        data = str(res)
 
         evt = SpiderFootEvent(typ, data, self.__name__, event)
         self.notifyListeners(evt)
 
-# End of sfp_new_module class
+# End of sfp_tendersguru class
